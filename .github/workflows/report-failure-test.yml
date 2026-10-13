@@ -1,0 +1,27 @@
+name: report-failure test
+
+# 本番と同じ Node で試すため setup-node は使わない。
+
+on:
+  pull_request:
+    paths: ["report-failure/**"]
+  push:
+    branches: [main]
+    paths: ["report-failure/**"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: ./report-failure
+
+jobs:
+  test:
+    name: report-failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: npm ci
+      - run: npm test
