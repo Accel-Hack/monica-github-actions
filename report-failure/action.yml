@@ -5,6 +5,9 @@ inputs:
   dsn:
     description: MONICA の secret key (msk_) の DSN。空なら何も送らない
     required: false
+  tags:
+    description: event に足す tag。値が文字列の JSON オブジェクトで書く (例 '{"deploy-target":"sandbox"}')。gha.* と同じキーは無視される
+    required: false
 
 runs:
   using: composite
@@ -14,4 +17,5 @@ runs:
       run: npm ci --prefix "$GITHUB_ACTION_PATH" && node "$GITHUB_ACTION_PATH/index.mjs"
       env:
         MONICA_DSN: ${{ inputs.dsn }}
+        MONICA_TAGS: ${{ inputs.tags }}
         GITHUB_TOKEN: ${{ github.token }}

@@ -1,13 +1,21 @@
 import { existsSync, readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createCoreClient, createFetchTransport } from "@ah-monica/core";
-import { buildItem, environmentFor, extractFailedStepLog, failedStep } from "./build.mjs";
+import { buildItem, environmentFor, extractFailedStepLog, failedStep, parseTags } from "./build.mjs";
 
 const env = process.env;
 const dsn = env.MONICA_DSN?.trim();
 if (!dsn) {
   console.log("::warning::MONICA_DSN is empty; nothing was sent to MONICA");
   process.exit(0);
+}
+
+let tags;
+try {
+  tags = parseTags(env.MONICA_TAGS);
+} catch (error) {
+  console.log(`::error::${error.message}`);
+  process.exit(1);
 }
 
 const repo = env.GITHUB_REPOSITORY;
@@ -82,7 +90,7 @@ const client = createCoreClient({
   sdk: { name: "Accel-Hack/monica-github-actions/report-failure", version: "1.0.0" },
 });
 for (const [i, job] of failed.entries()) {
-  const eventId = await client.capture(buildItem({ repo, run, job, log: logs[i] }));
+  const eventId = await client.capture(buildItem({ repo, run, job, log: logs[i], tags }));
   console.log(`sent ${job.name} event_id=${eventId}`);
 }
 

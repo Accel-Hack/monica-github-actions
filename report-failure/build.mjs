@@ -37,7 +37,26 @@ export function extractFailedStepLog(raw, step, maxLines = 100) {
   return Buffer.from(text).subarray(-MAX_LOG_BYTES).toString();
 }
 
-export function buildItem({ repo, run, job, log }) {
+// Throws on any bad entry instead of skipping it: a typo in the caller's workflow would otherwise
+// send events without the tag, and nobody notices until an alert rule filtering on it stays silent.
+export function parseTags(raw) {
+  if (!raw?.trim()) return {};
+  let tags;
+  try {
+    tags = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`tags is not valid JSON: ${error.message}`);
+  }
+  if (tags === null || typeof tags !== "object" || Array.isArray(tags)) {
+    throw new Error("tags must be a JSON object");
+  }
+  for (const [key, value] of Object.entries(tags)) {
+    if (typeof value !== "string") throw new Error(`tags.${key} must be a string`);
+  }
+  return tags;
+}
+
+export function buildItem({ repo, run, job, log, tags = {} }) {
   const step = failedStep(job);
   const pr = run.pull_requests?.[0]?.number;
   const branch = run.head_branch ?? "";
@@ -58,7 +77,9 @@ export function buildItem({ repo, run, job, log }) {
         { type: "JobFailed", value: `[${repo}] ${job.name} ${job.html_url}` },
       ],
     },
+    // The caller's tags go first so they cannot replace a gha.* tag that alert rules filter on.
     tags: {
+      ...tags,
       "gha.repository": repo,
       "gha.workflow": run.name,
       "gha.job": job.name,

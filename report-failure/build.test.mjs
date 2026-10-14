@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildItem, environmentFor, eventIdFor, extractFailedStepLog } from "./build.mjs";
+import { buildItem, environmentFor, eventIdFor, extractFailedStepLog, parseTags } from "./build.mjs";
 
 const RAW =
   "\uFEFF" +
@@ -131,3 +131,59 @@ test("buildItem without a PR, failed step, or log names the branch and omits the
   assert.ok(!("gha.pull_request" in item.tags));
   assert.equal(item.fingerprint.at(-1), "main");
 });
+
+const GHA_TAGS = {
+  "gha.repository": "o/r",
+  "gha.workflow": "CI",
+  "gha.job": "test",
+  "gha.event": "pull_request",
+  "gha.branch": "fix-x",
+  "gha.pull_request": "7",
+};
+
+for (const { name, tags, expected } of [
+  { name: "adds the caller's tags", tags: { "deploy-target": "sandbox" }, expected: { "deploy-target": "sandbox", ...GHA_TAGS } },
+  {
+    name: "keeps the gha.* tag on a key collision",
+    tags: { "gha.workflow": "spoofed", "gha.pull_request": "999", "deploy-target": "production" },
+    expected: { "deploy-target": "production", ...GHA_TAGS },
+  },
+  { name: "adds nothing for empty tags", tags: {}, expected: GHA_TAGS },
+  { name: "adds nothing when tags is omitted", tags: undefined, expected: GHA_TAGS },
+]) {
+  test(`buildItem ${name}`, () => {
+    assert.deepEqual(buildItem({ repo: "o/r", run: RUN, job: JOB, log: "a", tags }).tags, expected);
+  });
+}
+
+for (const { name, raw, expected } of [
+  { name: "undefined", raw: undefined, expected: {} },
+  { name: "an empty string", raw: "", expected: {} },
+  { name: "whitespace", raw: " \n", expected: {} },
+  { name: "an empty object", raw: "{}", expected: {} },
+  {
+    name: "a flat object of strings",
+    raw: '{"deploy-target":"sandbox","region":"ap-northeast-1"}',
+    expected: { "deploy-target": "sandbox", region: "ap-northeast-1" },
+  },
+]) {
+  test(`parseTags accepts ${name}`, () => {
+    assert.deepEqual(parseTags(raw), expected);
+  });
+}
+
+for (const { name, raw, message } of [
+  { name: "invalid JSON", raw: "{deploy-target: sandbox}", message: /^tags is not valid JSON: / },
+  { name: "an array", raw: '["sandbox"]', message: /^tags must be a JSON object$/ },
+  { name: "null", raw: "null", message: /^tags must be a JSON object$/ },
+  { name: "a string", raw: '"sandbox"', message: /^tags must be a JSON object$/ },
+  { name: "a nested object value", raw: '{"deploy":{"target":"sandbox"}}', message: /^tags\.deploy must be a string$/ },
+  { name: "an array value", raw: '{"targets":["sandbox"]}', message: /^tags\.targets must be a string$/ },
+  { name: "a number value", raw: '{"shard":1}', message: /^tags\.shard must be a string$/ },
+  { name: "a boolean value", raw: '{"canary":true}', message: /^tags\.canary must be a string$/ },
+  { name: "a null value", raw: '{"deploy-target":null}', message: /^tags\.deploy-target must be a string$/ },
+]) {
+  test(`parseTags rejects ${name}`, () => {
+    assert.throws(() => parseTags(raw), { message });
+  });
+}

@@ -25,6 +25,32 @@ GitHub Actions の job が失敗したとき、失敗した job 1 件につき 1
 - `needs` に書き忘れた job は拾えません。その job だけが失敗したときは `failure()` が偽になり、notify job が動きません。
 - `on: workflow_run` で起動した workflow から呼ぶと、起動元の run の失敗を送ります。
 
+### tag を足す
+
+`tags` に JSON オブジェクトを書くと、その run のすべての event に tag を足せます。省略すると何も足しません。
+
+同じ default branch から複数の deploy 先に出す構成では、environment がどれも `ci` になります。deploy 先を tag に入れておくと、MONICA のアラートルールの tagフィルターで分けられます。
+
+```yaml
+# deploy-sandbox.yml
+      - uses: Accel-Hack/monica-github-actions/report-failure@<commit SHA>
+        with:
+          dsn: ${{ secrets.MONICA_CI_DSN }}
+          tags: '{"deploy-target":"sandbox"}'
+```
+
+```yaml
+# deploy-production.yml
+      - uses: Accel-Hack/monica-github-actions/report-failure@<commit SHA>
+        with:
+          dsn: ${{ secrets.MONICA_CI_DSN }}
+          tags: '{"deploy-target":"production"}'
+```
+
+- 値は文字列だけです。数値・真偽値・配列・入れ子のオブジェクトは書けません。
+- JSON として読めないときや、値が文字列でないときは、何も送らずに notify job が失敗します。
+- `gha.` で始まる tag は action が付けます。同じキーを `tags` に書いても action の値が入ります。
+
 ## 送る内容
 
 - conclusion が `failure` か `timed_out` の job 1 件につき 1 event を送ります。cancelled の job は送りません。
@@ -33,7 +59,7 @@ GitHub Actions の job が失敗したとき、失敗した job 1 件につき 1
 - environment は default branch への push や schedule なら `ci`、PR とそれ以外の branch なら `ci-pr` です。release は commit SHA です。
 - fingerprint は repo・workflow path・job 名・branch です。同じ branch で同じ job が失敗し続けると、1 つの Issue にまとまります。
 - event_id は job id から決めています。notify job を再実行しても MONICA は同じ event を二重に数えません。
-- tag は `gha.repository` `gha.workflow` `gha.job` `gha.event` `gha.branch` です。PR のときは `gha.pull_request` も付けます。
+- tag は `gha.repository` `gha.workflow` `gha.job` `gha.event` `gha.branch` です。PR のときは `gha.pull_request` も付けます。呼び出し元が `tags` に書いた tag もここに加わります。
 
 ## MONICA 側の設定
 
