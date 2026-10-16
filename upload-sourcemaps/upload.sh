@@ -53,6 +53,6 @@ while IFS= read -r -d '' map; do
   fi
   echo "uploaded $map as $file"
   count=$((count + 1))
-done < <(find "$dir" -type f -name '*.map' -print0)
+done < <(find "$dir" -type f \( -name '*.js.map' -o -name '*.mjs.map' -o -name '*.cjs.map' \) -print0)
 
-((count > 0)) || fail "no *.map files under $dir"
+((count > 0)) || fail "no *.js.map, *.mjs.map or *.cjs.map files under $dir"

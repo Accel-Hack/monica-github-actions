@@ -35,7 +35,7 @@ jobs:
 
 ## 上げる内容
 
-- `path` の下にある `*.map` をすべて上げます。1 つも無ければ失敗します。
+- `path` の下にある JavaScript の map（`*.js.map`、`*.mjs.map`、`*.cjs.map`）をすべて上げます。CSS の map は上げません。1 つも無ければ失敗します。
 - map 1 つにつき 1 回、`PUT <ingest-url>/v1/sourcemaps?project=<project>&release=<release>&file=<file>` を送り、上げたファイルごとに 1 行ログを出します。
 - `file` は、map の `path` からの相対パスから `.map` を除き、前に `url-prefix` を付けたものです。`path: dist`、`url-prefix: /` なら、`dist/assets/index-BkX9a2Qz.js.map` は `/assets/index-BkX9a2Qz.js` として上がります。map は、JS ファイルの名前に `.map` を付けた名前で同じディレクトリに置かれている必要があります。
 - MONICA は、frame の `filename` から scheme と host、クエリ、フラグメント、先頭の `/` を除いた名前で map を引きます。`url-prefix` に `https://cdn.example.com/` のような origin を付けても付けなくても、同じ map に当たります。
@@ -93,7 +93,7 @@ export default defineConfig({
 | --- | --- | --- | --- |
 | `project` | 必須 | | MONICA のプロジェクトの slug |
 | `release` | 必須 | | SDK に渡す `release` と同じ値。commit SHA にします |
-| `path` | 必須 | | `*.map` を探すディレクトリ。下の階層も探します |
+| `path` | 必須 | | `*.js.map`、`*.mjs.map`、`*.cjs.map` を探すディレクトリ。下の階層も探します |
 | `url-prefix` | | `/` | `path` からの相対パスの前に付ける path。ブラウザや Worker から見えるファイルの path になるように書きます |
 | `ingest-url` | | `https://ingest.monica.accelhack.net` | MONICA の Ingest の origin。stg に上げるときは `https://ingest.stg.monica.accelhack.net` です |
 

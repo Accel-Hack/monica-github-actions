@@ -93,6 +93,7 @@ test("uploads each map gzipped, without sourcesContent, under its URL-encoded ru
     "dist/assets/index-BkX9a2Qz.js.map": JSON.stringify(MAP),
     "dist/assets/a b+c.js.map": JSON.stringify(MAP),
     "dist/assets/index-BkX9a2Qz.js": "console.log(1)",
+    "dist/assets/index-BkX9a2Qz.css.map": JSON.stringify(MAP),
   });
   const { code, stdout } = await run({ MAPS_PATH: join(root, "dist") });
 
@@ -139,7 +140,7 @@ test("fails when no map is found", async () => {
   const { code, stdout } = await run({ MAPS_PATH: join(root, "dist") });
 
   assert.equal(code, 1);
-  assert.match(stdout, /::error::no \*\.map files under/);
+  assert.match(stdout, /::error::no \*\.js\.map, \*\.mjs\.map or \*\.cjs\.map files under/);
 });
 
 test("fails without the OIDC request variables and sends nothing", async () => {

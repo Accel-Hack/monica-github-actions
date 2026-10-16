@@ -9,7 +9,7 @@ inputs:
     description: SDK に渡す release と同じ値
     required: true
   path:
-    description: source map (*.map) を探すディレクトリ。下の階層も探す
+    description: JavaScript の source map (*.js.map、*.mjs.map、*.cjs.map) を探すディレクトリ。下の階層も探す
     required: true
   url-prefix:
     description: path からの相対パスの前に付ける、ブラウザや Worker から見えるファイルの path
