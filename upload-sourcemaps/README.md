@@ -103,7 +103,7 @@ export default defineConfig({
 
 - `no GitHub OIDC token available`: job の `permissions` に `id-token: write` がありません。fork からの pull request で動いた run も、トークンを取れないので失敗します (GitHub の挙動で、未確認)。
 - 403: この repository が、MONICA のプロジェクトの Settings の GitHub で選ばれていません。
-- 413: map が大きすぎます。上限は、展開した body が 32 MiB、`sourcesContent` を除いた map が 10 MiB です (どちらも暫定)。
+- 413: map が大きすぎます。上限は展開した body で 10 MiB です (暫定)。この action は `sourcesContent` を除いて送るので、それでも超えるときは bundle を分けてください。
 - 422: map が source map v3 の JSON ではありません。
 
 ## 制約
