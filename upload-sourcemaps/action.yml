@@ -1,0 +1,33 @@
+name: Upload source maps to MONICA
+description: build した source map を、release とファイル名ごとに MONICA の Ingest へ上げる
+
+inputs:
+  project:
+    description: MONICA のプロジェクトの slug
+    required: true
+  release:
+    description: SDK に渡す release と同じ値
+    required: true
+  path:
+    description: JavaScript の source map (*.js.map、*.mjs.map、*.cjs.map) を探すディレクトリ。下の階層も探す
+    required: true
+  url-prefix:
+    description: path からの相対パスの前に付ける、ブラウザや Worker から見えるファイルの path
+    required: false
+    default: /
+  ingest-url:
+    description: MONICA の Ingest の origin
+    required: false
+    default: https://ingest.monica.accelhack.net
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: bash "$GITHUB_ACTION_PATH/upload.sh"
+      env:
+        MONICA_PROJECT: ${{ inputs.project }}
+        MONICA_RELEASE: ${{ inputs.release }}
+        MAPS_PATH: ${{ inputs.path }}
+        URL_PREFIX: ${{ inputs.url-prefix }}
+        INGEST_URL: ${{ inputs.ingest-url }}
