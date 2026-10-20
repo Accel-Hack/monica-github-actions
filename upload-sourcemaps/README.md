@@ -2,6 +2,40 @@
 
 build で出た source map を MONICA へ上げる composite action です。MONICA は、ブラウザと Cloudflare Workers から届いたイベントの frame を、上げた map で元のファイルと行に戻してから Issue にまとめます。
 
+## 組み込む手順
+
+この README を読んで組み込むエージェントも、この順に進めます。1 は人にしかできないので、利用者に頼みます。
+
+1. **人に頼む。** MONICA の管理画面で、プロジェクトの Settings の GitHub に、この workflow を置く repository を選んでもらいます。エージェントは管理画面を操作できません。選ばれていないと、upload は 403 で失敗します。一覧に repository が出ないときは、MONICA の GitHub App をその repository に入れてもらいます。
+2. **`project` と `ingest-url` を決める。** SDK に渡している DSN から決めます。MONICA の管理画面が出す DSN は `https://<key>@<host>/<project の slug>` の形です。`project` には末尾の slug を書き、`ingest-url` には `https://<host>` を書きます。本番の Ingest（`ingest.monica.accelhack.net`）なら、`ingest-url` は省けます。
+3. **SDK に `release` を渡す。** upload の `release` と同じ値を、SDK の `release` にも渡します。値は commit SHA にします。すでに SDK に `release` を渡しているなら、その値を upload にも使います。
+   - ブラウザ（`@ah-monica/browser`）は、build のときに値を埋め込みます。Vite なら、build の環境変数 `VITE_MONICA_RELEASE` に commit SHA を入れ、`Monica.init({ dsn, environment, release: import.meta.env.VITE_MONICA_RELEASE })` と書きます。
+   - Cloudflare Workers（`@ah-monica/cloudflare`）は、`wrangler deploy --var MONICA_RELEASE:<deploy する commit の SHA>` で渡し、`createCloudflareClient({ dsn, environment, release: env.MONICA_RELEASE })` と書きます。
+4. **bundler で map を出す。** Vite は `build.sourcemap: "hidden"` にします（下の「Vite」）。Workers は `wrangler deploy --dry-run --outdir dist` で bundle と map を書き出します（下の「Cloudflare Workers」）。ほかの bundler では、JS と同じディレクトリに `<JS のファイル名>.map` を出す設定にします。
+5. **`path` と `url-prefix` を決める。** `path` は build の出力ディレクトリです。`url-prefix` は、`url-prefix` と「`path` からの相対パスから `.map` を除いたもの」をつないだ値が、ブラウザが JS を取りに行く URL の path と一致するように決めます。
+   - build の出力が `dist/assets/index-BkX9a2Qz.js` で、ブラウザが `https://example.com/assets/index-BkX9a2Qz.js` を読むなら、`path: dist`、`url-prefix: /`（既定値）です。
+   - Vite の `base` や webpack の `publicPath` を変えているときは、その値を `url-prefix` に書きます。
+   - 配信の設定でさらに path が変わる場合は、deploy した HTML の `<script src>` にある path から決めます。
+6. **workflow に step を足す。** build の後、deploy の前に置きます（下の「呼び出し方」）。`uses` の `<monica-github-actions の main の SHA>` には、次のコマンドが出す SHA を書きます。
+
+   ```sh
+   git ls-remote https://github.com/Accel-Hack/monica-github-actions.git refs/heads/main
+   ```
+
+   `actions/checkout` など、ほかの action の `uses` は、呼び出し側の workflow で固定している SHA のまま変えません。
+
+   ブラウザ向けの build では、upload の後、deploy の前に `.map` を消す step も足します。`sourcemap: "hidden"` でも `.map` のファイルは出力ディレクトリに残るので、消さないと map も配信されます。
+7. **確かめる。**
+   - CI のログに、map ごとに `uploaded <map> as <file>` が出ます。`<file>` が、ブラウザが読む JS の URL の path と一致しているかを見ます。Workers なら、MONICA に届くスタックに出るファイル名と比べます。
+   - deploy の後に起きたエラーを、MONICA の Issue 詳細で開きます。スタックが元のファイルと行で出て、source map の注記が無ければ当たっています。注記に map の無いファイル名が出たら、その名前と `<file>` を比べ、`url-prefix` か `release` を直します。
+
+## やってはいけないこと
+
+- `uses` を branch の名前（`@main` など）で書く。monica-github-actions 側の変更が、確かめないまま呼び出し元の CI で動きます。
+- deploy の後に上げる。deploy から upload までに届いたイベントは元に戻らないまま、upload の後とは別の Issue にまとまります。
+- map をブラウザに配信する。`sourcesContent` に入った元のソースコードを、誰でも読めます。
+- MONICA の API key を secret に足す。この action は job の OIDC トークンで認証するので、key は要りません。
+
 ## 呼び出し方
 
 build と deploy の間に置きます。
@@ -13,24 +47,21 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      MONICA_RELEASE: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@<commit SHA>
-      - run: npm ci && npm run build   # SDK の release に MONICA_RELEASE を渡す
-      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<commit SHA>
+      - uses: actions/checkout@<呼び出し側で固定している SHA>
+      - run: npm ci && npm run build   # SDK の release に github.sha を渡す（組み込む手順の 3）
+      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<monica-github-actions の main の SHA>
         with:
           project: my-app
-          release: ${{ env.MONICA_RELEASE }}
+          release: ${{ github.sha }}
           path: dist
+      - run: find dist -name '*.map' -delete
       - run: npm run deploy
 ```
 
-- `<commit SHA>` には monica-github-actions の main の最新の commit SHA を書きます。branch の名前で書くと、monica-github-actions 側の変更がそのまま呼び出し元の CI で動きます。
 - job の `permissions` に `id-token: write` を書きます。action は job の OIDC トークンで MONICA に認証するので、secret は要りません。`permissions` を書くと、書かなかった権限は無しになるので、checkout のために `contents: read` も書きます。
 - `release` は SDK に渡す `release` と同じ値にします。違うと map が当たりません。
-- MONICA の管理画面で、プロジェクトの Settings の GitHub に、この workflow の repository を選んでおきます。選んでいないと 403 で失敗します。
-- deploy の前に上げます。deploy の後に上げると、deploy から upload までに届いたイベントは元に戻らないまま Issue にまとまり、upload の後のイベントとは別の Issue になります。後から map を上げても、まとめ直しはしません。
+- 後から map を上げても、それより前に届いたイベントをまとめ直しはしません。
 - map を上げ始めると、そのプロジェクトのブラウザと Workers の Issue は一度だけ割れて、新しい Issue が開きます。新規 Issue の通知も届きます。frame のファイル名が bundle のものから元のソースのものに変わるためです。bundle のファイル名で書いたグルーピングルールと、アラートルールの culprit フィルターも当たらなくなります。
 
 ## 上げる内容
@@ -56,7 +87,7 @@ export default defineConfig({
       - run: npm ci && npm run build
         env:
           VITE_MONICA_RELEASE: ${{ github.sha }}   # SDK の release に import.meta.env.VITE_MONICA_RELEASE を渡す
-      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<commit SHA>
+      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<monica-github-actions の main の SHA>
         with:
           project: my-app
           release: ${{ github.sha }}
@@ -66,14 +97,14 @@ export default defineConfig({
 ```
 
 - `sourcemap: "hidden"` は map を出しますが、JS に `sourceMappingURL` を書きません。
-- map を配信しないなら、upload の後、deploy の前に消します。消さずに配信すると、map の `sourcesContent` に入った元のソースコードを誰でも読めます。
+- `hidden` でも `.map` のファイルは `dist` に残ります。upload の後、deploy の前に消します。消さずに配信すると、map の `sourcesContent` に入った元のソースコードを誰でも読めます。
 - Vite の `base` を変えているときは、`url-prefix` に同じ値を書きます。`base: "/app/"` なら `url-prefix: /app/` です。
 
 ## Cloudflare Workers
 
 ```yaml
       - run: npx wrangler deploy --dry-run --outdir dist
-      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<commit SHA>
+      - uses: Accel-Hack/monica-github-actions/upload-sourcemaps@<monica-github-actions の main の SHA>
         with:
           project: my-worker
           release: ${{ github.sha }}
@@ -99,7 +130,7 @@ export default defineConfig({
 
 ## 失敗したとき
 
-失敗すると、step は MONICA の返した status と body をログに出して止まります。その後の map は上げません。
+失敗すると、step は MONICA の返した status と body をログに出して止まります。その後の map は上げず、後ろの deploy の step も動きません。upload に失敗しても deploy を続けたいなら、この step に `continue-on-error: true` を付けます。そのときは、その release のイベントが元に戻らないまま Issue にまとまります。
 
 - `no GitHub OIDC token available`: job の `permissions` に `id-token: write` がありません。fork からの pull request で動いた run も、トークンを取れないので失敗します (GitHub の挙動で、未確認)。
 - 403: この repository が、MONICA のプロジェクトの Settings の GitHub で選ばれていません。
